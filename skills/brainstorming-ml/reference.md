@@ -70,6 +70,18 @@ Lookup tables for the five-stage question sequence in `SKILL.md`. Pull specific 
 | Autoencoders | Nonlinear structure, high-dim data (images), needs more data |
 | Feature hashing | High-cardinality categoricals, memory-constrained settings |
 
+### Encoding categorical features — when to use which
+
+| Model family | Preferred encoding | Why |
+|---|---|---|
+| Tree-based (Random Forest, XGBoost/LightGBM/CatBoost) | Native categorical support (LightGBM, CatBoost) or target/frequency encoding at high cardinality; one-hot only below ~10 categories | Trees split on thresholds/subsets, not literal magnitude, so integer codes don't impose false order — but one-hot fragments a category across many dummy columns, forcing extra splits and diluting importance, especially at high cardinality |
+| Linear/logistic regression, SVM, k-NN, k-means | One-hot (or dummy, k-1) for nominal categories; target/frequency encoding or hashing at high cardinality | These models read the encoded value as a literal number — label/integer encoding a nominal category imposes a false numeric order and false distances between unrelated categories |
+| Neural networks | Learned entity embeddings at medium/high cardinality; one-hot is fine at low cardinality | Embeddings place similar categories closer together, cutting dimensionality instead of one-hot's linear blowup, and let the network learn structure among categories |
+| Any model, ordinal category (e.g. contract-length bucket, rating) | Ordinal/integer encoding matching the true order | The order is real signal every model type can use directly — one-hot throws it away |
+
+- **Cardinality rule of thumb:** one-hot is safe under ~10 categories regardless of model family; above that, prefer native categorical handling, target/frequency encoding, hashing, or embeddings — one-hot's column count grows linearly with cardinality and each dummy column gets sparser.
+- **Target/frequency encoding must follow the pipeline's fit-on-train rule** (see Data Pipeline Design below) — fit category statistics on train only (or out-of-fold within train), never on the full dataset, or the encoding leaks the target into validation/test.
+
 ### Feature selection — when to use which
 
 | Method class | Examples | Trade-off |
@@ -85,7 +97,7 @@ Lookup tables for the five-stage question sequence in `SKILL.md`. Pull specific 
   - Stratified split: imbalanced classification (preserve class ratios)
   - Group split: multiple rows per entity (e.g., per user) — split by entity, never by row
   - Time-based split: time series, or any temporal leakage risk — train on past, validate/test on future
-- **Preprocessing order:** clean → impute → encode categoricals → scale/normalize → engineer features → select features. Fit all transforms on train only; apply to val/test.
+- **Preprocessing order:** clean/dedupe → **split** (per the split strategy above) → engineer row-local features (features computed from a single row's own history are safe on either side of the split) → impute → encode categoricals → select features → scale/normalize. Everything from impute onward must be fit on train only and applied to val/test — fitting any of these steps before the split, or on the full dataset, is a leakage bug, not just a style choice.
 - **Leakage checks:** any feature computed using future/target information? any preprocessing fit on the full dataset instead of train only?
 - **Reproducibility:** fixed random seeds, versioned dataset snapshots, documented row counts per split.
 
