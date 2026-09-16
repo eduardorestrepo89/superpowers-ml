@@ -27,7 +27,7 @@ You've seen a lot of tabular churn data — you can probably predict that tenure
 
 Match model strength to what each step actually demands, and dispatch via a subagent (the Agent tool's `model` override) rather than performing the work inline on whatever model happens to be running the orchestrating conversation:
 
-- **Generating the notebook (step 3):** a mechanical translation of the EDA Plan's already-specified checks into runnable cells, with a clear spec and no open judgment calls — dispatch to a fast, cheap model.
+- **Generating the notebook (step 3):** looks like mechanical translation, but it isn't zero-judgment — marimo's reactive DAG forbids duplicate global names across cells and depends on correct cell ordering, and multi-table joins require getting cardinality/dedup semantics right from a prose description. A cheap model gets these wrong often enough that the notebook fails on the user's first `marimo edit`, burning a full round-trip before any real EDA happens — dispatch to a standard model.
 - **Interpreting each finding (step 6) and drafting the Finalize rewrite (step 8):** judgment grounded in real evidence — feature keep/drop calls, framing-break detection, the language of the finalized spec — dispatch to the most capable available model.
 
 The live back-and-forth with the user — asking which path to take, walking through findings one at a time, waiting on approval — still happens in the orchestrating conversation; only the analysis/generation behind each turn gets dispatched.
@@ -126,6 +126,7 @@ If they name specific changes, record the change as a dated addendum in the deci
 | One giant cell running the whole EDA plan | The user can't isolate a single result to report back; one labeled cell per EDA Plan item keeps the handoff usable |
 | Writing the notebook as a `.ipynb` instead of a marimo notebook | ipynb's JSON envelope, execution counts, and embedded output blobs bloat every re-read of the notebook back into context — a cost this skill pays repeatedly across its round-trip loop; marimo's plain-Python format doesn't |
 | Performing this skill's analysis/generation work inline on the orchestrating session's model instead of dispatching per Model Selection | Interpretation (step 6) and the Finalize rewrite (step 8) are judgment calls that deserve the strongest reasoning available, not whatever model happens to be running the conversation |
+| Dispatching notebook generation (step 3) to a cheap model because it "looks mechanical" | Marimo's DAG constraints and join-cardinality reasoning trip up weak models, producing a notebook that errors on first run — a wasted round-trip that costs more than the cheap model saved |
 | Batching multiple interpretation questions into one message | Same failure as skipping "one question at a time" in brainstorming — a wall of questions gets a shallow, rushed answer |
 | Treating the handoff as a single round-trip | Findings often raise new questions that need another notebook cell — expect to loop back through steps 5–6, not finish in one pass |
 | Deferring the decisions-file write until later in the loop, or until Finalize | Defeats the purpose of the file — if the conversation compacts mid-EDA, there's nothing on disk to recover the lost decisions from |
