@@ -1,0 +1,20 @@
+{
+  "name": "superpowers-ml",
+  "description": "Machine-learning extension skills for Superpowers",
+  "owner": {
+    "name": "Eduardo Restrepo",
+    "url": "https://github.com/eduardorestrepo89"
+  },
+  "plugins": [
+    {
+      "name": "superpowers-ml",
+      "description": "ML-specific brainstorming and a paired, user-driven EDA workflow on a live marimo kernel. Extends Superpowers core; requires it and the marimo-pair plugin.",
+      "version": "0.1.0",
+      "source": "./",
+      "author": {
+        "name": "Eduardo Restrepo",
+        "url": "https://github.com/eduardorestrepo89"
+      }
+    }
+  ]
+}

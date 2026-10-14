@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# SessionStart hook for the superpowers-ml extension plugin.
+#
+# Fires on compaction only. Core superpowers injects using-superpowers at
+# startup; this plugin does not duplicate that, and has nothing to say on a
+# fresh session.
+#
+# Why this exists: compaction replays an earlier-invoked skill as a truncated
+# attachment (the replay says so itself) and does not re-send the
+# available-skills listing at all. A gate that entered the context as an
+# instruction comes back as background information about something the agent
+# once did, which is how execution discipline quietly stops binding mid-session.
+# This re-asserts it from outside the transcript, where compaction cannot reach.
+
+set -euo pipefail
+
+# SessionStart receives a JSON payload on stdin whose "source" is one of
+# startup|resume|clear|compact|fork. Read it without jq, which may not be
+# installed, and never block: hooks always get a pipe, but guard for a tty.
+hook_input=""
+if [ ! -t 0 ]; then
+    hook_input="$(cat 2>/dev/null || true)"
+fi
+session_source="$(printf '%s' "$hook_input" \
+    | grep -o '"source"[[:space:]]*:[[:space:]]*"[^"]*"' \
+    | head -1 \
+    | sed -e 's/.*:[[:space:]]*"//' -e 's/"$//' || true)"
+
+# Anything but a compaction: say nothing at all.
+if [ "$session_source" != "compact" ]; then
+    exit 0
+fi
+
+# Prefer CLAUDE_PLUGIN_ROOT. On Windows it is a native path the Read tool can
+# open, whereas `pwd` under Git Bash yields an MSYS path (/c/...) that it cannot.
+# Fall back to the computed location when the variable is absent.
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+    plugin_root="${CLAUDE_PLUGIN_ROOT%/}"
+else
+    script_dir="$(cd "$(dirname "$0")" && pwd)"
+    plugin_root="$(cd "${script_dir}/.." && pwd)"
+fi
+
+# Normalize to forward slashes so the path needs no JSON escaping: Windows
+# accepts them, and a backslash inside a JSON string would be an invalid
+# escape. cygpath -m also converts an MSYS /c/... path, which is what the
+# fallback above produces and which the Read tool cannot open. On Linux and
+# macOS there is no cygpath and nothing to convert.
+if command -v cygpath >/dev/null 2>&1; then
+    plugin_root="$(cygpath -m "$plugin_root" 2>/dev/null || printf '%s' "$plugin_root")"
+fi
+plugin_root="${plugin_root%/}"
+# Strip the only remaining character that could break the string literal.
+plugin_root="$(printf '%s' "$plugin_root" | tr -d '"')"
+
+# The \n sequences below are literal backslash-n, not newlines: printf writes
+# %s verbatim into a JSON string, so these are already the escapes JSON wants.
+session_context="<EXTREMELY_IMPORTANT>\nThe conversation was just compacted. Any skill you invoked before that point is now present only as a truncated replay, and a paraphrase of a gate is not a gate. Before your next tool call, if you are part-way through a skill's workflow, re-read that skill's SKILL.md from disk with the Read tool and follow the file rather than your recollection of it. Do not resume a skill's workflow from memory of its rules, and do not treat a rule that is missing from the replay as a rule that no longer applies.\n\nThis plugin's skills are at ${plugin_root}/skills/ - brainstorming-ml/SKILL.md and running-eda-ml/SKILL.md. Both carry execution gates in their body text, which is exactly the content a truncated replay drops.\n</EXTREMELY_IMPORTANT>"
+
+# Uses printf instead of a heredoc to work around the bash 5.3+ heredoc hang.
+# See: https://github.com/obra/superpowers/issues/571
+#
+# reloadSkills asks Claude Code to re-scan the skill and command directories.
+# Compaction deliberately does not re-send the available-skills listing
+# (https://github.com/anthropics/claude-code/issues/74990); the documented
+# purpose of reloadSkills is picking up skills a hook installed, so whether it
+# also restores the listing in context after a compaction is untested here.
+# Requires Claude Code >= 2.1.152; older versions see an unrecognized field.
+printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "SessionStart",\n    "reloadSkills": true,\n    "additionalContext": "%s"\n  }\n}\n' "$session_context"
+
+exit 0

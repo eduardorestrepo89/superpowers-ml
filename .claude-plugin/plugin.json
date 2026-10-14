@@ -1,0 +1,19 @@
+{
+  "name": "superpowers-ml",
+  "version": "0.1.0",
+  "description": "Machine-learning extension skills for Superpowers: ML-specific brainstorming and a paired, user-driven EDA workflow on a live marimo kernel.",
+  "author": {
+    "name": "Eduardo Restrepo",
+    "url": "https://github.com/eduardorestrepo89"
+  },
+  "homepage": "https://github.com/eduardorestrepo89/superpowers-ml",
+  "repository": "https://github.com/eduardorestrepo89/superpowers-ml",
+  "license": "MIT",
+  "keywords": [
+    "machine-learning",
+    "eda",
+    "marimo",
+    "brainstorming",
+    "skills"
+  ]
+}
